@@ -66,6 +66,13 @@ DARK_BLUE = (100, 149, 237)
 YELLOW = (255, 255, 0)
 BLUE = (0, 0, 255)
 
+# Add these to your global variables/constants at the top
+CLASH_BATTLE_DURATION = 360  # 6 seconds at 60 FPS
+CLASH_BATTLE_BAR_WIDTH = 300
+CLASH_BATTLE_BAR_HEIGHT = 30
+CLASH_DAMAGE = 100
+CLASHES_NEEDED = 10
+
 class SwingEffect:
     def __init__(self, x, y, angle):
         self.x = x
@@ -303,7 +310,11 @@ class Player:
         self.guard_cooldown_duration = 30
         self.knockback_dx = 0  # For sword clash knockback
         self.knockback_dy = 0
-
+        
+        # Clash battle
+        self.clash_count = 0
+        self.clash_power = 0  # For the clash battle minigame
+        
     def draw(self, screen):
         # Get view angle
         is_side_view = 135 <= self.direction <= 225 or (self.direction >= 315 or self.direction <= 45)
@@ -592,6 +603,58 @@ class Player:
         # Clean up old effects
         self.swing_effects = [e for e in self.swing_effects if e['alpha'] > 0]
 
+    def move(self, controls, attack_key=pygame.K_SPACE):
+        dx = 0
+        dy = 0
+        
+        # Movement controls
+        if controls[pygame.K_w]:
+            dy -= self.speed
+            self.direction = 270
+        if controls[pygame.K_s]:
+            dy += self.speed
+            self.direction = 90
+        if controls[pygame.K_a]:
+            dx -= self.speed
+            self.direction = 180
+        if controls[pygame.K_d]:
+            dx += self.speed
+            self.direction = 0
+
+        # Attack handling
+        if controls[attack_key] and not self.is_attacking and self.attack_cooldown == 0:
+            self.is_attacking = True
+            self.attack_frame = 0
+            sound_manager.play_sound('swing')
+
+        # Diagonal movement
+        if dx != 0 and dy != 0:
+            if dx > 0 and dy < 0:  # Up-right
+                self.direction = 315
+            elif dx > 0 and dy > 0:  # Down-right
+                self.direction = 45
+            elif dx < 0 and dy > 0:  # Down-left
+                self.direction = 135
+            elif dx < 0 and dy < 0:  # Up-left
+                self.direction = 225
+
+        # Normalize diagonal movement speed
+        if dx != 0 and dy != 0:
+            dx *= 0.707  # 1/sqrt(2)
+            dy *= 0.707
+
+        # Update base sword angle to match player direction
+        self.base_sword_angle = self.direction
+
+        # Update position with boundary checking
+        new_x = self.x + dx
+        new_y = self.y + dy
+        
+        if 0 + self.size < new_x < width - self.size:
+            self.x = new_x
+        if 0 + self.size < new_y < height - self.size:
+            self.y = new_y
+
     def take_damage(self, amount, hit_angle=None):
         """Take damage and create effects"""
         if self.hit_cooldown <= 0:
@@ -625,7 +688,6 @@ class Player:
                 
                 if self.health <= 0:
                     self.is_dead = True
-                    sound_manager.play_sound('victory')
 
     def check_hit(self, other_player):
         if self.is_attacking and self.attack_frame == self.attack_duration // 2:
@@ -655,6 +717,15 @@ class Player:
                 if other_player.is_attacking and other_player.attack_frame > 0:
                     # Sword clash occurred!
                     sound_manager.play_sound('sword-clash')
+                    self.clash_count += 1
+                    other_player.clash_count += 1
+                    
+                    # Check if this is the tenth clash
+                    if self.clash_count >= CLASHES_NEEDED and other_player.clash_count >= CLASHES_NEEDED:
+                        return ClashBattle(self, other_player, 
+                                        pygame.display.get_surface().get_width(),
+                                        pygame.display.get_surface().get_height())
+                        
                     # Strong knockback for both players
                     knockback_force = 10
                     self.knockback_dx = -math.cos(math.radians(hit_angle)) * knockback_force
@@ -675,66 +746,157 @@ class Player:
                     'alpha': 255
                 })
 
-    def move(self, keys):
-        dx = 0
-        dy = 0
+class ClashBattle:
+    def __init__(self, player1, player2, screen_width, screen_height):
+        self.player1 = player1
+        self.player2 = player2
+        self.duration = CLASH_BATTLE_DURATION
+        self.active = True
+        self.winner = None
+        self.battle_ended = False
         
-        if keys[pygame.K_w]:
-            dy -= self.speed
-            self.direction = 270
-        if keys[pygame.K_s]:
-            dy += self.speed
-            self.direction = 90
-        if keys[pygame.K_a]:
-            dx -= self.speed
-            self.direction = 180
-        if keys[pygame.K_d]:
-            dx += self.speed
-            self.direction = 0
-
-        # Diagonal movement
-        if dx != 0 and dy != 0:
-            if dx > 0 and dy < 0:  # Up-right
-                self.direction = 315
-            elif dx > 0 and dy > 0:  # Down-right
-                self.direction = 45
-            elif dx < 0 and dy > 0:  # Down-left
-                self.direction = 135
-            elif dx < 0 and dy < 0:  # Up-left
-                self.direction = 225
-
-        # Normalize diagonal movement speed
-        if dx != 0 and dy != 0:
-            dx *= 0.707  # 1/sqrt(2)
-            dy *= 0.707
-
-        # Update base sword angle to match player direction
-        self.base_sword_angle = self.direction
-
-        # Update position with boundary checking
-        new_x = self.x + dx
-        new_y = self.y + dy
+        # Center positions
+        self.center_x = screen_width // 2
+        self.center_y = screen_height // 2
         
-        if 0 + self.size < new_x < width - self.size:
-            self.x = new_x
-        if 0 + self.size < new_y < height - self.size:
-            self.y = new_y
-
-        # Handle attack
-        if self.attack_cooldown > 0:
-            self.attack_cooldown -= 1
-
-        if keys[pygame.K_SPACE] and not self.is_attacking and self.attack_cooldown == 0:
-            self.is_attacking = True
-            self.attack_frame = 0
-
-        if self.is_attacking:
-            self.attack_frame += 1
-            if self.attack_frame == 1:  # Just started attacking
-                sound_manager.play_sound('swing')
-            if self.attack_frame >= self.attack_duration:
-                self.is_attacking = False
-                self.attack_cooldown = self.attack_cooldown_duration
+        # Reset player positions and face each other
+        self.player1.x = self.center_x - 100
+        self.player1.y = self.center_y
+        self.player1.direction = 0  # Face right
+        
+        self.player2.x = self.center_x + 100
+        self.player2.y = self.center_y
+        self.player2.direction = 180  # Face left
+        
+        # Reset clash powers
+        self.player1.clash_power = CLASH_BATTLE_BAR_WIDTH // 2
+        self.player2.clash_power = CLASH_BATTLE_BAR_WIDTH // 2
+        
+        # Camera zoom effect
+        self.zoom = 1.0
+        self.target_zoom = 1.5
+        
+        # Initialize font for timer and instructions
+        self.font = pygame.font.Font(None, 36)
+        
+    def update(self, keys):
+        if not self.active:
+            return
+            
+        # Update zoom
+        self.zoom += (self.target_zoom - self.zoom) * 0.1
+        
+        # Update clash powers based on button mashing (reverted to original values)
+        if keys[pygame.K_SPACE]:
+            self.player1.clash_power += 2
+        if keys[pygame.K_RETURN]:
+            self.player2.clash_power += 2
+            
+        # Natural decay of power (reverted to original values)
+        self.player1.clash_power -= 1
+        self.player2.clash_power -= 1
+            
+        # Keep powers within bounds
+        self.player1.clash_power = min(max(0, self.player1.clash_power), CLASH_BATTLE_BAR_WIDTH)
+        self.player2.clash_power = min(max(0, self.player2.clash_power), CLASH_BATTLE_BAR_WIDTH)
+        
+        # Update duration
+        if not self.battle_ended:
+            self.duration -= 1
+            if self.duration <= 0:
+                self.end_battle()
+            
+    def draw(self, screen):
+        if not self.active:
+            return
+            
+        # Draw the clash power bar
+        bar_x = (screen.get_width() - CLASH_BATTLE_BAR_WIDTH) // 2
+        bar_y = screen.get_height() // 4
+        
+        # Background bar
+        pygame.draw.rect(screen, (50, 50, 50), 
+                        (bar_x, bar_y, CLASH_BATTLE_BAR_WIDTH, CLASH_BATTLE_BAR_HEIGHT))
+        
+        # Calculate power percentages with safeguard against division by zero
+        total_power = self.player1.clash_power + self.player2.clash_power
+        if total_power > 0:
+            split_point = int((self.player1.clash_power / total_power) * CLASH_BATTLE_BAR_WIDTH)
+        else:
+            split_point = CLASH_BATTLE_BAR_WIDTH // 2
+        
+        # Player 1's power (left side)
+        pygame.draw.rect(screen, self.player1.color,
+                        (bar_x, bar_y, split_point, CLASH_BATTLE_BAR_HEIGHT))
+        
+        # Player 2's power (right side)
+        pygame.draw.rect(screen, self.player2.color,
+                        (bar_x + split_point, bar_y, 
+                         CLASH_BATTLE_BAR_WIDTH - split_point, CLASH_BATTLE_BAR_HEIGHT))
+        
+        # Create a black background for text to make it more readable
+        def draw_text_with_background(text, position):
+            text_surface = self.font.render(text, True, (255, 255, 255))
+            text_rect = text_surface.get_rect(center=position)
+            padding = 5
+            bg_rect = text_rect.inflate(padding * 2, padding * 2)
+            pygame.draw.rect(screen, (0, 0, 0), bg_rect)
+            pygame.draw.rect(screen, (255, 255, 255), bg_rect, 2)
+            screen.blit(text_surface, text_rect)
+            return text_rect.bottom + padding
+        
+        # Draw timer with background
+        if not self.battle_ended:
+            time_left = max(0, self.duration // 60)  # Convert frames to seconds, minimum 0
+            timer_pos = (bar_x + CLASH_BATTLE_BAR_WIDTH // 2, bar_y - 30)
+            draw_text_with_background(f"Time: {time_left}", timer_pos)
+        
+        # Draw instructions with background
+        if not self.battle_ended:
+            instruction_y = bar_y + CLASH_BATTLE_BAR_HEIGHT + 20
+            draw_text_with_background("P1: Mash SPACE!", 
+                                   (bar_x + 100, instruction_y))
+            draw_text_with_background("P2: Mash ENTER!", 
+                                   (bar_x + CLASH_BATTLE_BAR_WIDTH - 100, instruction_y))
+        
+        # Draw who's winning with background
+        if not self.battle_ended:
+            status_y = bar_y + CLASH_BATTLE_BAR_HEIGHT + 60
+            if self.player1.clash_power > self.player2.clash_power:
+                status_text = "P1 is winning!"
+                status_color = self.player1.color
+            elif self.player2.clash_power > self.player1.clash_power:
+                status_text = "P2 is winning!"
+                status_color = self.player2.color
+            else:
+                status_text = "It's even!"
+                status_color = (255, 255, 255)
+            
+            text_surface = self.font.render(status_text, True, status_color)
+            text_rect = text_surface.get_rect(center=(bar_x + CLASH_BATTLE_BAR_WIDTH // 2, status_y))
+            padding = 5
+            bg_rect = text_rect.inflate(padding * 2, padding * 2)
+            pygame.draw.rect(screen, (0, 0, 0), bg_rect)
+            pygame.draw.rect(screen, (255, 255, 255), bg_rect, 2)
+            screen.blit(text_surface, text_rect)
+        
+    def end_battle(self):
+        if not self.battle_ended:  # Only run this once
+            self.battle_ended = True
+            # Determine winner and deal damage
+            if self.player1.clash_power > self.player2.clash_power:
+                self.winner = self.player1
+                self.player2.take_damage(CLASH_DAMAGE)
+            elif self.player2.clash_power > self.player1.clash_power:
+                self.winner = self.player2
+                self.player1.take_damage(CLASH_DAMAGE)
+            
+            # Reset clash counts
+            self.player1.clash_count = 0
+            self.player2.clash_count = 0
+            
+            # Set a short delay before deactivating
+            pygame.time.set_timer(pygame.USEREVENT + 1, 1000)  # 1 second delay
 
 # Initialize Pygame font
 pygame.font.init()
@@ -784,6 +946,51 @@ def draw_score(screen):
     score2_rect = score2_text.get_rect(right=width-20, top=60)
     screen.blit(score2_text, score2_rect)
 
+def draw_game_over(screen, winner):
+    font = pygame.font.Font(None, 74)
+    text = font.render(f"{winner} Wins!", True, (255, 255, 255))
+    text_rect = text.get_rect(center=(screen.get_width()//2, screen.get_height()//2))
+    
+    # Draw text background
+    padding = 20
+    bg_rect = text_rect.inflate(padding * 2, padding * 2)
+    pygame.draw.rect(screen, (0, 0, 0), bg_rect)
+    pygame.draw.rect(screen, (255, 255, 255), bg_rect, 2)
+    
+    screen.blit(text, text_rect)
+    
+    # Draw restart instruction
+    font_small = pygame.font.Font(None, 36)
+    restart_text = font_small.render("Press R to Restart", True, (255, 255, 255))
+    restart_rect = restart_text.get_rect(center=(screen.get_width()//2, text_rect.bottom + 40))
+    screen.blit(restart_text, restart_rect)
+
+def draw_round_over(screen, winner):
+    font = pygame.font.Font(None, 74)
+    text = font.render("Round Over!", True, (255, 255, 255))
+    text_rect = text.get_rect(center=(screen.get_width()//2, screen.get_height()//2))
+    
+    # Draw text background
+    padding = 20
+    bg_rect = text_rect.inflate(padding * 2, padding * 2)
+    pygame.draw.rect(screen, (0, 0, 0), bg_rect)
+    pygame.draw.rect(screen, (255, 255, 255), bg_rect, 2)
+    
+    screen.blit(text, text_rect)
+    
+    # Draw winner text if there is one
+    if winner:
+        font_small = pygame.font.Font(None, 48)
+        winner_text = font_small.render(f"{winner} wins the round!", True, (255, 255, 255))
+        winner_rect = winner_text.get_rect(center=(screen.get_width()//2, text_rect.bottom + 40))
+        screen.blit(winner_text, winner_rect)
+    
+    # Draw restart instruction
+    font_small = pygame.font.Font(None, 36)
+    restart_text = font_small.render("Press R to Continue", True, (255, 255, 255))
+    restart_rect = restart_text.get_rect(center=(screen.get_width()//2, text_rect.bottom + 80))
+    screen.blit(restart_text, restart_rect)
+
 # Create try again button
 try_again_btn = Button(width//2 - 100, height//2 - 25, 200, 50, "Next Round!", (102, 255, 102))
 
@@ -796,140 +1003,104 @@ player2 = Player(3 * width // 4, height // 2,
 # Game loop
 clock = pygame.time.Clock()
 running = True
+clash_battle = None
 
 while running:
     current_time = pygame.time.get_ticks() // 1000
-    
-    # Update background
-    background.update()
-    
-    # Update timer every second
-    if current_time > last_second and game_state == PLAYING:
-        timer -= 1
-        last_second = current_time
-        if timer <= 0:
-            game_state = ROUND_OVER
-            # Determine winner based on health
-            if player1.health > player2.health:
-                player1_wins += 1
-                sound_manager.play_sound('victory')
-            elif player2.health > player1.health:
-                player2_wins += 1
-                sound_manager.play_sound('victory')
-    
-    # Event handling
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
-        elif game_state in [GAME_OVER, ROUND_OVER]:
-            if try_again_btn.handle_event(event):
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_r and (game_state == GAME_OVER or game_state == ROUND_OVER):
                 reset_round()
-    
+                game_state = PLAYING
+        # Add clash battle end timer event
+        if event.type == pygame.USEREVENT + 1:  # This is our battle end timer
+            if clash_battle:
+                clash_battle.active = False
+                pygame.time.set_timer(pygame.USEREVENT + 1, 0)  # Stop the timer
+
+    # Update background
+    background.update()
+
     # Clear the screen and draw background
+    screen.fill(BLACK)
     background.draw(screen)
     
+    keys = pygame.key.get_pressed()
+    
     if game_state == PLAYING:
-        # Handle player movement
-        keys = pygame.key.get_pressed()
-        # Player 1 controls
-        if not player1.is_dead:
-            if keys[pygame.K_a]:
-                dx1 = -5
-            if keys[pygame.K_d]:
-                dx1 = 5
-            if keys[pygame.K_w]:
-                dy1 = -5
-            if keys[pygame.K_s]:
-                dy1 = 5
-            if keys[pygame.K_f] and not player1.is_attacking:
-                player1.is_attacking = True
-                player1.attack_frame = 0
-                sound_manager.play_sound('swing')
-            # Add guard control for player 1 (G key)
-            player1.is_guarding = keys[pygame.K_g] and player1.guard_cooldown <= 0
-        
-        # Player 2 controls
-        if not player2.is_dead:
-            if keys[pygame.K_LEFT]:
-                dx2 = -5
-            if keys[pygame.K_RIGHT]:
-                dx2 = 5
-            if keys[pygame.K_UP]:
-                dy2 = -5
-            if keys[pygame.K_DOWN]:
-                dy2 = 5
-            if keys[pygame.K_m] and not player2.is_attacking:
-                player2.is_attacking = True
-                player2.attack_frame = 0
-                sound_manager.play_sound('swing')
-            # Add guard control for player 2 (N key)
-            player2.is_guarding = keys[pygame.K_n] and player2.guard_cooldown <= 0
-        
-        player1.move(keys)
-        player2.move({pygame.K_w: keys[pygame.K_UP], pygame.K_s: keys[pygame.K_DOWN], pygame.K_a: keys[pygame.K_LEFT], pygame.K_d: keys[pygame.K_RIGHT], pygame.K_SPACE: keys[pygame.K_RCTRL]})
-        
-        # Update players
-        player1.update()
-        player2.update()
-        
-        # Check for hits
-        player1.check_hit(player2)
-        player2.check_hit(player1)
-        
-        # Draw the players
-        player1.draw(screen)
-        player2.draw(screen)
-        
-        # Draw health bars in better positions
-        health_bar_y = 20  # Move bars higher up
-        player1.draw_health_bar(screen, 20, health_bar_y)  # Left side
-        player2.draw_health_bar(screen, width - 220, health_bar_y)  # Right side, accounting for bar width
-        
-        # Draw timer and score
-        draw_timer(screen)
-        draw_score(screen)
-        
-        # Check for game over
-        if player1.is_dead or player2.is_dead:
-            game_state = GAME_OVER
-            if player1.is_dead:
-                player2_wins += 1
-            else:
-                player1_wins += 1
-    
-    else:  # GAME_OVER or ROUND_OVER state
-        # Draw "Game Over" text
-        font = pygame.font.Font(None, 74)
-        if game_state == GAME_OVER:
-            winner = "Player 2" if player1.is_dead else "Player 1"
-            text = font.render(f"{winner} Wins!", True, (0, 0, 0))
-        else:  # ROUND_OVER
-            if player1.health > player2.health:
-                winner = "Player 1"
-            elif player2.health > player1.health:
+        if clash_battle and clash_battle.active:
+            clash_battle.update(keys)
+        else:
+            # Normal game updates
+            if clash_battle and clash_battle.winner:
+                clash_battle = None  # Reset after battle is done
+                
+            # Handle player movement
+            if not player1.is_dead:
+                # Create player 1's control dictionary
+                player1_keys = {
+                    pygame.K_w: keys[pygame.K_w],
+                    pygame.K_s: keys[pygame.K_s],
+                    pygame.K_a: keys[pygame.K_a],
+                    pygame.K_d: keys[pygame.K_d],
+                    pygame.K_SPACE: keys[pygame.K_SPACE]  # Attack key
+                }
+                player1.move(player1_keys, pygame.K_SPACE)
+                player1.is_guarding = keys[pygame.K_g] and player1.guard_cooldown <= 0
+            
+            if not player2.is_dead:
+                # Create player 2's control dictionary
+                player2_keys = {
+                    pygame.K_w: keys[pygame.K_UP],
+                    pygame.K_s: keys[pygame.K_DOWN],
+                    pygame.K_a: keys[pygame.K_LEFT],
+                    pygame.K_d: keys[pygame.K_RIGHT],
+                    pygame.K_RETURN: keys[pygame.K_RETURN]  # Attack key
+                }
+                player2.move(player2_keys, pygame.K_RETURN)
+                player2.is_guarding = keys[pygame.K_n] and player2.guard_cooldown <= 0
+            
+            # Check for hits and possible clash battle trigger
+            result = player1.check_hit(player2)
+            if isinstance(result, ClashBattle):
+                clash_battle = result
+            result = player2.check_hit(player1)
+            if isinstance(result, ClashBattle):
+                clash_battle = result
+            
+            # Update players
+            player1.update()
+            player2.update()
+            
+            # Check win condition
+            if player1.health <= 0:
+                player1.is_dead = True
+                game_state = GAME_OVER
                 winner = "Player 2"
-            else:
-                winner = "Draw"
-            text = font.render(f"Time's Up! {winner}!", True, (0, 0, 0))
-        
-        text_rect = text.get_rect(center=(width//2, height//2 - 100))
-        screen.blit(text, text_rect)
-        
-        # Draw score
-        score_font = pygame.font.Font(None, 48)
-        score_text = score_font.render(f"Score: {player1_wins} - {player2_wins}", True, (0, 0, 0))
-        score_rect = score_text.get_rect(center=(width//2, height//2 - 40))
-        screen.blit(score_text, score_rect)
-        
-        # Draw try again button
-        try_again_btn.draw(screen)
+            elif player2.health <= 0:
+                player2.is_dead = True
+                game_state = GAME_OVER
+                winner = "Player 1"
     
-    # Update the display
+    # Draw game elements
+    player1.draw(screen)
+    player2.draw(screen)
+    
+    if clash_battle and clash_battle.active:
+        clash_battle.draw(screen)
+    
+    # Draw UI
+    player1.draw_health_bar(screen, 10, 10)
+    player2.draw_health_bar(screen, screen.get_width() - 210, 10)
+    
+    if game_state == GAME_OVER:
+        draw_game_over(screen, winner)
+    elif game_state == ROUND_OVER:
+        draw_round_over(screen, winner)
+    
     pygame.display.flip()
-    
-    # Control game speed
     clock.tick(60)
 
-# Quit the game
 pygame.quit()
-sys.exit()
