@@ -5,12 +5,15 @@ import random
 from assets.background import ColiseumBackground
 from assets.sound_manager import SoundManager
 import os
+from networking import NetworkManager  
+import socket
+import pickle
 
 # Initialize Pygame
 pygame.init()
 pygame.mixer.init()
 pygame.mixer.music.load('assets/background-music.wav')
-pygame.mixer.music.play(-1)  # -1 means the music will loop indefinitely
+pygame.mixer.music.play(-1)  
 
 # Create sound manager
 sound_manager = SoundManager()
@@ -18,13 +21,13 @@ sound_manager = SoundManager()
 # Set up game window
 info = pygame.display.Info()
 width, height = info.current_w, info.current_h
-screen = pygame.display.set_mode((width, height), pygame.NOFRAME)  # Removes the window border
+screen = pygame.display.set_mode((width, height), pygame.NOFRAME)  
 pygame.display.set_caption("Medieval Fighting Game")
 
 # Create background
 background = ColiseumBackground(width, height)
 
-# Load sounds (you'll need to add your own sound files)
+# Load sounds 
 sound_files = {
     'hit': 'assets/hit.wav',
     'swing': 'assets/swing.wav',
@@ -67,7 +70,7 @@ YELLOW = (255, 255, 0)
 BLUE = (0, 0, 255)
 
 # Add these to your global variables/constants at the top
-CLASH_BATTLE_DURATION = 360  # 6 seconds at 60 FPS
+CLASH_BATTLE_DURATION = 360  
 CLASH_BATTLE_BAR_WIDTH = 300
 CLASH_BATTLE_BAR_HEIGHT = 30
 CLASH_DAMAGE = 100
@@ -193,7 +196,7 @@ class BloodEffect:
     def __init__(self, x, y, direction=None):
         self.x = x
         self.y = y
-        self.lifetime = 60  # Longer lifetime for blood
+        self.lifetime = 60  
         self.particles = []
         # Create blood particles
         num_particles = random.randint(8, 12)
@@ -213,9 +216,9 @@ class BloodEffect:
                 'dx': math.cos(angle) * speed,
                 'dy': math.sin(angle) * speed,
                 'size': size,
-                'original_size': size,  # Store original size for scaling
-                'splat': False,  # Whether particle has hit the ground
-                'splat_size': size * random.uniform(1.5, 2.5)  # Size after hitting ground
+                'original_size': size,  
+                'splat': False,  
+                'splat_size': size * random.uniform(1.5, 2.5)  
             })
     
     def update(self):
@@ -225,18 +228,18 @@ class BloodEffect:
             if not p['splat']:
                 p['x'] += p['dx']
                 p['y'] += p['dy']
-                p['dy'] += 0.3  # Gravity
+                p['dy'] += 0.3  
                 
-                # Check if particle hit the ground (you can adjust this height)
-                if p['y'] > height - 50:  # Ground level
+                # Check if particle hit the ground 
+                if p['y'] > height - 50:  
                     p['splat'] = True
                     p['y'] = height - 50
                     p['size'] = p['splat_size']
-                    p['dx'] *= 0.5  # Slow down horizontal movement
+                    p['dx'] *= 0.5  
             else:
                 # Splattered particles still move a bit horizontally
                 p['x'] += p['dx']
-                p['dx'] *= 0.95  # Friction
+                p['dx'] *= 0.95  
         
         return self.lifetime > 0
     
@@ -247,14 +250,14 @@ class BloodEffect:
             
             if p['splat']:
                 # Draw elongated splat
-                color = (140, 0, 0, alpha)  # Darker red for splats
+                color = (140, 0, 0, alpha)  
                 height = p['size'] * 0.6
                 pygame.draw.ellipse(particle_surface, color,
                                   (0, p['size'] - height/2,
                                    p['size'] * 2, height))
             else:
                 # Draw round drop
-                color = (180, 0, 0, alpha)  # Brighter red for drops
+                color = (180, 0, 0, alpha)  
                 pygame.draw.circle(particle_surface, color,
                                  (p['size'], p['size']), p['size'])
             
@@ -269,15 +272,15 @@ class Player:
         self.speed = 5
         self.color = color
         self.body_color = body_color
-        self.direction = 0  # Angle in degrees
+        self.direction = 0  
         self.health = 500
         self.is_dead = False
         self.hit_cooldown = 0
         self.hit_cooldown_duration = 20
         self.damage_numbers = []
         self.swing_effects = []
-        self.hit_effects = []  # Add hit effects list
-        self.blood_effects = []  # Add blood effects list
+        self.hit_effects = []  
+        self.blood_effects = []  
         
         # Sword parameters
         self.sword_length = 40
@@ -301,19 +304,19 @@ class Player:
         # Effects
         self.swing_effects = []
         self.damage_effects = []
-        self.base_sword_angle = 45  # Initial sword angle
-        self.sword_angle = self.base_sword_angle  # Current sword angle
+        self.base_sword_angle = 45  
+        self.sword_angle = self.base_sword_angle  
         
         # Guarding
         self.is_guarding = False
         self.guard_cooldown = 0
         self.guard_cooldown_duration = 30
-        self.knockback_dx = 0  # For sword clash knockback
+        self.knockback_dx = 0  
         self.knockback_dy = 0
         
         # Clash battle
         self.clash_count = 0
-        self.clash_power = 0  # For the clash battle minigame
+        self.clash_power = 0  
         
     def draw(self, screen):
         # Get view angle
@@ -358,7 +361,7 @@ class Player:
         if self.is_attacking:
             # Calculate sword angle for attack
             swing_progress = self.attack_frame / self.attack_duration
-            swing_range = 180  # Full swing range
+            swing_range = 180  
             
             # Adjust swing for view
             if is_side_view:
@@ -414,7 +417,7 @@ class Player:
         # Draw guard symbol when guarding
         if self.is_guarding:
             shield_radius = 15
-            shield_y = self.y - self.size - 30  # Position above player
+            shield_y = self.y - self.size - 30  
             # Draw shield circle
             pygame.draw.circle(screen, (192, 192, 192), (int(self.x), int(shield_y)), shield_radius)
             # Draw shield cross
@@ -471,8 +474,8 @@ class Player:
 
     def draw_health_bar(self, screen, x, y):
         # Health bar dimensions
-        bar_width = 200  # Made wider
-        bar_height = 25  # Made taller
+        bar_width = 200  
+        bar_height = 25  
         border_width = 4
         
         # Calculate health percentage
@@ -480,21 +483,21 @@ class Player:
         health_width = bar_width * health_percent
         
         # Colors
-        border_color = (101, 67, 33)  # Dark brown
-        bg_color = (80, 0, 0)  # Dark red
+        border_color = (101, 67, 33)  
+        bg_color = (80, 0, 0)  
         health_colors = [
-            (200, 0, 0),    # Red (low health)
-            (200, 150, 0),  # Orange (medium health)
-            (0, 200, 0)     # Green (high health)
+            (200, 0, 0),    
+            (200, 150, 0),  
+            (0, 200, 0)     
         ]
         
         # Determine health bar color based on percentage
         if health_percent > 0.6:
-            health_color = health_colors[2]  # Green
+            health_color = health_colors[2]  
         elif health_percent > 0.3:
-            health_color = health_colors[1]  # Orange
+            health_color = health_colors[1]  
         else:
-            health_color = health_colors[0]  # Red
+            health_color = health_colors[0]  
         
         # Draw decorative outer border
         pygame.draw.rect(screen, border_color, 
@@ -561,7 +564,7 @@ class Player:
         if self.is_attacking:
             self.attack_frame += 1
             # Make the sword swing faster and more responsive
-            swing_speed = 15  # Increased swing speed
+            swing_speed = 15  
             
             # Calculate sword angle based on attack frame
             progress = self.attack_frame / self.attack_duration
@@ -592,7 +595,7 @@ class Player:
         
         # Update swing effects
         for effect in self.swing_effects:
-            effect['alpha'] = max(0, effect['alpha'] - 25)  # Faster fade
+            effect['alpha'] = max(0, effect['alpha'] - 25)  
         
         # Update hit effects
         self.hit_effects = [effect for effect in self.hit_effects if effect.update()]
@@ -629,18 +632,18 @@ class Player:
 
         # Diagonal movement
         if dx != 0 and dy != 0:
-            if dx > 0 and dy < 0:  # Up-right
+            if dx > 0 and dy < 0:  
                 self.direction = 315
-            elif dx > 0 and dy > 0:  # Down-right
+            elif dx > 0 and dy > 0:  
                 self.direction = 45
-            elif dx < 0 and dy > 0:  # Down-left
+            elif dx < 0 and dy > 0:  
                 self.direction = 135
-            elif dx < 0 and dy < 0:  # Up-left
+            elif dx < 0 and dy < 0:  
                 self.direction = 225
 
         # Normalize diagonal movement speed
         if dx != 0 and dy != 0:
-            dx *= 0.707  # 1/sqrt(2)
+            dx *= 0.707  
             dy *= 0.707
 
         # Update base sword angle to match player direction
@@ -762,11 +765,11 @@ class ClashBattle:
         # Reset player positions and face each other
         self.player1.x = self.center_x - 100
         self.player1.y = self.center_y
-        self.player1.direction = 0  # Face right
+        self.player1.direction = 0  
         
         self.player2.x = self.center_x + 100
         self.player2.y = self.center_y
-        self.player2.direction = 180  # Face left
+        self.player2.direction = 180  
         
         # Reset clash powers
         self.player1.clash_power = CLASH_BATTLE_BAR_WIDTH // 2
@@ -786,13 +789,13 @@ class ClashBattle:
         # Update zoom
         self.zoom += (self.target_zoom - self.zoom) * 0.1
         
-        # Update clash powers based on button mashing (reverted to original values)
+        # Update clash powers based on button mashing 
         if keys[pygame.K_SPACE]:
             self.player1.clash_power += 2
         if keys[pygame.K_RETURN]:
             self.player2.clash_power += 2
             
-        # Natural decay of power (reverted to original values)
+        # Natural decay of power 
         self.player1.clash_power -= 1
         self.player2.clash_power -= 1
             
@@ -847,7 +850,7 @@ class ClashBattle:
         
         # Draw timer with background
         if not self.battle_ended:
-            time_left = max(0, self.duration // 60)  # Convert frames to seconds, minimum 0
+            time_left = max(0, self.duration // 60)  
             timer_pos = (bar_x + CLASH_BATTLE_BAR_WIDTH // 2, bar_y - 30)
             draw_text_with_background(f"Time: {time_left}", timer_pos)
         
@@ -881,7 +884,7 @@ class ClashBattle:
             screen.blit(text_surface, text_rect)
         
     def end_battle(self):
-        if not self.battle_ended:  # Only run this once
+        if not self.battle_ended:  
             self.battle_ended = True
             # Determine winner and deal damage
             if self.player1.clash_power > self.player2.clash_power:
@@ -896,7 +899,7 @@ class ClashBattle:
             self.player2.clash_count = 0
             
             # Set a short delay before deactivating
-            pygame.time.set_timer(pygame.USEREVENT + 1, 1000)  # 1 second delay
+            pygame.time.set_timer(pygame.USEREVENT + 1, 1000)  
 
 # Initialize Pygame font
 pygame.font.init()
@@ -905,10 +908,19 @@ pygame.font.init()
 PLAYING = 0
 GAME_OVER = 1
 ROUND_OVER = 2
-game_state = PLAYING
+MENU = 3  
+WAITING_CONNECTION = 4  
+game_state = MENU  
+
+# Network variables
+network_manager = NetworkManager()
+is_host = False
+remote_data = None
+connection_status = "Disconnected"
+opponent_ip = ""
 
 # Timer settings
-ROUND_TIME = 5 * 60  # 5 minutes in seconds
+ROUND_TIME = 5 * 60  
 timer = ROUND_TIME
 last_second = pygame.time.get_ticks() // 1000
 
@@ -918,15 +930,15 @@ player2_wins = 0
 
 def reset_round():
     global player1, player2, game_state, timer
-    pygame.mixer.music.stop()  # Stop the music when there's a winner
+    pygame.mixer.music.stop()  
     player1 = Player(width // 4, height // 2)
     player2 = Player(3 * width // 4, height // 2, 
-                    color=(255, 192, 203),  # Pink
-                    body_color=(219, 112, 147))  # Darker pink
+                    color=(255, 192, 203),  
+                    body_color=(219, 112, 147))  
     game_state = PLAYING
     timer = ROUND_TIME
     pygame.mixer.music.load('assets/background-music.wav')
-    pygame.mixer.music.play(-1)  # Play the music on loop
+    pygame.mixer.music.play(-1)  
 
 def draw_timer(screen):
     minutes = timer // 60
@@ -997,8 +1009,169 @@ try_again_btn = Button(width//2 - 100, height//2 - 25, 200, 50, "Next Round!", (
 # Create players
 player1 = Player(width // 4, height // 2)
 player2 = Player(3 * width // 4, height // 2, 
-                color=(255, 192, 203),  # Pink
-                body_color=(219, 112, 147))  # Darker pink
+                color=(255, 192, 203),  
+                body_color=(219, 112, 147))  
+
+# Create a menu button class that's more visually appealing
+class MenuButton(Button):
+    def __init__(self, x, y, width, height, text, color):
+        super().__init__(x, y, width, height, text, color)
+        self.hover_color = (min(color[0] + 30, 255), min(color[1] + 30, 255), min(color[2] + 30, 255))
+        self.font = pygame.font.Font(None, 36)
+        self.is_hovered = False
+        
+    def draw(self, screen):
+        # Draw button with hover effect
+        color = self.hover_color if self.is_hovered else self.color
+        pygame.draw.rect(screen, color, self.rect)
+        pygame.draw.rect(screen, (255, 255, 255), self.rect, 2)  
+        
+        # Draw text
+        text_surf = self.font.render(self.text, True, (255, 255, 255))
+        text_rect = text_surf.get_rect(center=self.rect.center)
+        screen.blit(text_surf, text_rect)
+        
+    def update(self, mouse_pos):
+        self.is_hovered = self.rect.collidepoint(mouse_pos)
+        
+    def check_click(self, mouse_pos, mouse_click):
+        return self.rect.collidepoint(mouse_pos) and mouse_click
+
+# Function to draw the menu
+def draw_menu(screen):
+    # Background
+    screen.fill((0, 0, 0))
+    background.draw(screen)
+    
+    # Title
+    font_title = pygame.font.Font(None, 74)
+    title_text = font_title.render("Medieval Fighting Game", True, (255, 255, 255))
+    title_shadow = font_title.render("Medieval Fighting Game", True, (0, 0, 0))
+    
+    # Draw shadow with offset
+    title_rect = title_text.get_rect(center=(width//2, height//4))
+    shadow_rect = title_shadow.get_rect(center=(width//2 + 2, height//4 + 2))
+    screen.blit(title_shadow, shadow_rect)
+    screen.blit(title_text, title_rect)
+    
+    # Draw buttons
+    host_button.update(pygame.mouse.get_pos())
+    join_button.update(pygame.mouse.get_pos())
+    quit_button.update(pygame.mouse.get_pos())
+    
+    host_button.draw(screen)
+    join_button.draw(screen)
+    quit_button.draw(screen)
+
+# Function to draw the connection screen
+def draw_connection_screen(screen, status_message):
+    # Background
+    screen.fill((0, 0, 0))
+    background.draw(screen)
+    
+    # Title
+    font_title = pygame.font.Font(None, 48)
+    if is_host:
+        title_text = font_title.render("Hosting Game - Waiting for Player...", True, (255, 255, 255))
+        
+        # Show IP address for others to connect to
+        ip_font = pygame.font.Font(None, 36)
+        ip_text = ip_font.render(f"Your IP Address: {network_manager.get_server_ip()}", True, (255, 255, 255))
+        ip_rect = ip_text.get_rect(center=(width//2, height//2))
+        screen.blit(ip_text, ip_rect)
+    else:
+        title_text = font_title.render("Connecting to Host...", True, (255, 255, 255))
+    
+    title_rect = title_text.get_rect(center=(width//2, height//4))
+    screen.blit(title_text, title_rect)
+    
+    # Status message
+    status_font = pygame.font.Font(None, 36)
+    status_text = status_font.render(status_message, True, (255, 255, 255))
+    status_rect = status_text.get_rect(center=(width//2, height//2 + 50))
+    screen.blit(status_text, status_rect)
+    
+    # Back button
+    back_button.update(pygame.mouse.get_pos())
+    back_button.draw(screen)
+
+# Function to draw IP input box
+def draw_ip_input_screen(screen):
+    # Background
+    screen.fill((0, 0, 0))
+    background.draw(screen)
+    
+    # Title
+    font_title = pygame.font.Font(None, 48)
+    title_text = font_title.render("Enter Host IP Address", True, (255, 255, 255))
+    title_rect = title_text.get_rect(center=(width//2, height//4))
+    screen.blit(title_text, title_rect)
+    
+    # IP input box
+    pygame.draw.rect(screen, (50, 50, 50), (width//2 - 150, height//2 - 25, 300, 50))
+    pygame.draw.rect(screen, (255, 255, 255), (width//2 - 150, height//2 - 25, 300, 50), 2)
+    
+    # IP text
+    ip_font = pygame.font.Font(None, 36)
+    ip_text = ip_font.render(opponent_ip, True, (255, 255, 255))
+    ip_rect = ip_text.get_rect(center=(width//2, height//2))
+    screen.blit(ip_text, ip_rect)
+    
+    # Instruction
+    instruction_font = pygame.font.Font(None, 24)
+    instruction_text = instruction_font.render("Enter the IP address of the host and press Enter", True, (200, 200, 200))
+    instruction_rect = instruction_text.get_rect(center=(width//2, height//2 + 50))
+    screen.blit(instruction_text, instruction_rect)
+    
+    # Back button
+    back_button.update(pygame.mouse.get_pos())
+    back_button.draw(screen)
+    connect_button.update(pygame.mouse.get_pos())
+    connect_button.draw(screen)
+
+# Function to prepare player data for network transmission
+def prepare_player_data(player):
+    # Create a dict with only the necessary data to send over network
+    return {
+        'x': player.x,
+        'y': player.y,
+        'direction': player.direction,
+        'health': player.health,
+        'is_attacking': player.is_attacking,
+        'attack_frame': player.attack_frame,
+        'is_guarding': player.is_guarding,
+        'is_dead': player.is_dead
+    }
+
+# Function to update player from received network data
+def update_player_from_data(player, data):
+    if not data:
+        return
+    
+    player.x = data['x']
+    player.y = data['y']
+    player.direction = data['direction']
+    player.health = data['health']
+    player.is_attacking = data['is_attacking']
+    player.attack_frame = data['attack_frame']
+    player.is_guarding = data['is_guarding']
+    player.is_dead = data['is_dead']
+
+# Create menu buttons
+button_width, button_height = 300, 60
+menu_center_x = width // 2
+menu_start_y = height // 2
+
+host_button = MenuButton(menu_center_x - button_width//2, menu_start_y - 80, 
+                        button_width, button_height, "Host Game", (76, 175, 80))
+join_button = MenuButton(menu_center_x - button_width//2, menu_start_y, 
+                        button_width, button_height, "Join Game", (70, 130, 180))
+quit_button = MenuButton(menu_center_x - button_width//2, menu_start_y + 80, 
+                        button_width, button_height, "Quit Game", (180, 70, 70))
+back_button = MenuButton(menu_center_x - button_width//2, height - 120, 
+                        button_width, button_height, "Back to Menu", (180, 70, 70))
+connect_button = MenuButton(menu_center_x - button_width//2, height - 200, 
+                           button_width, button_height, "Connect", (76, 175, 80))
 
 # Game loop
 clock = pygame.time.Clock()
@@ -1007,6 +1180,9 @@ clash_battle = None
 
 while running:
     current_time = pygame.time.get_ticks() // 1000
+    mouse_pos = pygame.mouse.get_pos()
+    mouse_clicked = False
+    
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
@@ -1014,11 +1190,26 @@ while running:
             if event.key == pygame.K_r and (game_state == GAME_OVER or game_state == ROUND_OVER):
                 reset_round()
                 game_state = PLAYING
+            # Handle text input for IP address
+            if game_state == WAITING_CONNECTION and not is_host:
+                if event.key == pygame.K_RETURN:
+                    # Try to connect with the entered IP
+                    success, message = network_manager.connect_to_server(opponent_ip)
+                    connection_status = message
+                    if success:
+                        game_state = PLAYING
+                elif event.key == pygame.K_BACKSPACE:
+                    opponent_ip = opponent_ip[:-1]
+                elif event.unicode.isprintable() and len(opponent_ip) < 15:
+                    opponent_ip += event.unicode
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:  
+                mouse_clicked = True
         # Add clash battle end timer event
-        if event.type == pygame.USEREVENT + 1:  # This is our battle end timer
+        if event.type == pygame.USEREVENT + 1:  
             if clash_battle:
                 clash_battle.active = False
-                pygame.time.set_timer(pygame.USEREVENT + 1, 0)  # Stop the timer
+                pygame.time.set_timer(pygame.USEREVENT + 1, 0)  
 
     # Update background
     background.update()
@@ -1027,42 +1218,100 @@ while running:
     screen.fill(BLACK)
     background.draw(screen)
     
-    keys = pygame.key.get_pressed()
+    # Handle different game states
+    if game_state == MENU:
+        draw_menu(screen)
+        
+        # Check button clicks
+        if mouse_clicked:
+            if host_button.check_click(mouse_pos, mouse_clicked):
+                is_host = True
+                success, message = network_manager.start_server()
+                connection_status = message
+                game_state = WAITING_CONNECTION
+            elif join_button.check_click(mouse_pos, mouse_clicked):
+                is_host = False
+                game_state = WAITING_CONNECTION
+            elif quit_button.check_click(mouse_pos, mouse_clicked):
+                running = False
     
-    if game_state == PLAYING:
+    elif game_state == WAITING_CONNECTION:
+        if is_host:
+            # For host: check if client connected
+            draw_connection_screen(screen, connection_status)
+            if network_manager.client_connected:
+                game_state = PLAYING
+                
+            # Check back button
+            if mouse_clicked and back_button.check_click(mouse_pos, mouse_clicked):
+                network_manager.close()
+                game_state = MENU
+        else:
+            # For client: show IP input screen
+            draw_ip_input_screen(screen)
+            
+            # Check buttons
+            if mouse_clicked:
+                if back_button.check_click(mouse_pos, mouse_clicked):
+                    network_manager.close()
+                    game_state = MENU
+                elif connect_button.check_click(mouse_pos, mouse_clicked):
+                    success, message = network_manager.connect_to_server(opponent_ip)
+                    connection_status = message
+                    if success:
+                        game_state = PLAYING
+    
+    elif game_state == PLAYING:
+        keys = pygame.key.get_pressed()
+        
         if clash_battle and clash_battle.active:
             clash_battle.update(keys)
         else:
             # Normal game updates
             if clash_battle and clash_battle.winner:
-                clash_battle = None  # Reset after battle is done
+                clash_battle = None  
                 
-            # Handle player movement
-            if not player1.is_dead:
-                # Create player 1's control dictionary
-                player1_keys = {
-                    pygame.K_w: keys[pygame.K_w],
-                    pygame.K_s: keys[pygame.K_s],
-                    pygame.K_a: keys[pygame.K_a],
-                    pygame.K_d: keys[pygame.K_d],
-                    pygame.K_SPACE: keys[pygame.K_SPACE]  # Attack key
-                }
-                player1.move(player1_keys, pygame.K_SPACE)
-                player1.is_guarding = keys[pygame.K_g] and player1.guard_cooldown <= 0
+            # Handle player movement based on whether we're host or client
+            if is_host:
+                # Host controls player1
+                if not player1.is_dead:
+                    # Create player 1's control dictionary
+                    player1_keys = {
+                        pygame.K_w: keys[pygame.K_w],
+                        pygame.K_s: keys[pygame.K_s],
+                        pygame.K_a: keys[pygame.K_a],
+                        pygame.K_d: keys[pygame.K_d],
+                        pygame.K_SPACE: keys[pygame.K_SPACE]  
+                    }
+                    player1.move(player1_keys, pygame.K_SPACE)
+                    player1.is_guarding = keys[pygame.K_g] and player1.guard_cooldown <= 0
+                
+                # Send player1 data and receive player2 data
+                network_manager.send_data(prepare_player_data(player1))
+                remote_data_list = network_manager.get_latest_data()
+                if remote_data_list:
+                    update_player_from_data(player2, remote_data_list[-1])  
+            else:
+                # Client controls player2
+                if not player2.is_dead:
+                    # Create player 2's control dictionary
+                    player2_keys = {
+                        pygame.K_w: keys[pygame.K_w],
+                        pygame.K_s: keys[pygame.K_s],
+                        pygame.K_a: keys[pygame.K_a],
+                        pygame.K_d: keys[pygame.K_d],
+                        pygame.K_SPACE: keys[pygame.K_SPACE]  
+                    }
+                    player2.move(player2_keys, pygame.K_SPACE)
+                    player2.is_guarding = keys[pygame.K_g] and player2.guard_cooldown <= 0
+                
+                # Send player2 data and receive player1 data
+                network_manager.send_data(prepare_player_data(player2))
+                remote_data_list = network_manager.get_latest_data()
+                if remote_data_list:
+                    update_player_from_data(player1, remote_data_list[-1])  
             
-            if not player2.is_dead:
-                # Create player 2's control dictionary
-                player2_keys = {
-                    pygame.K_w: keys[pygame.K_UP],
-                    pygame.K_s: keys[pygame.K_DOWN],
-                    pygame.K_a: keys[pygame.K_LEFT],
-                    pygame.K_d: keys[pygame.K_RIGHT],
-                    pygame.K_RETURN: keys[pygame.K_RETURN]  # Attack key
-                }
-                player2.move(player2_keys, pygame.K_RETURN)
-                player2.is_guarding = keys[pygame.K_n] and player2.guard_cooldown <= 0
-            
-            # Check for hits and possible clash battle trigger
+            # Check for hits and possible clash battle trigger locally 
             result = player1.check_hit(player2)
             if isinstance(result, ClashBattle):
                 clash_battle = result
@@ -1085,15 +1334,16 @@ while running:
                 winner = "Player 1"
     
     # Draw game elements
-    player1.draw(screen)
-    player2.draw(screen)
-    
-    if clash_battle and clash_battle.active:
-        clash_battle.draw(screen)
-    
-    # Draw UI
-    player1.draw_health_bar(screen, 10, 10)
-    player2.draw_health_bar(screen, screen.get_width() - 210, 10)
+    if game_state == PLAYING or game_state == GAME_OVER or game_state == ROUND_OVER:
+        player1.draw(screen)
+        player2.draw(screen)
+        
+        if clash_battle and clash_battle.active:
+            clash_battle.draw(screen)
+        
+        # Draw UI
+        player1.draw_health_bar(screen, 10, 10)
+        player2.draw_health_bar(screen, screen.get_width() - 210, 10)
     
     if game_state == GAME_OVER:
         draw_game_over(screen, winner)
@@ -1103,4 +1353,7 @@ while running:
     pygame.display.flip()
     clock.tick(60)
 
+# Clean up before quitting
+network_manager.close()
 pygame.quit()
+sys.exit()
